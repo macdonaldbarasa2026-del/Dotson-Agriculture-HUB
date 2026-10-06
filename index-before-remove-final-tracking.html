@@ -109,6 +109,7 @@ window.runAfterDomBinding = {
 <!-- CUSTOM_CODE_START -->
 <!-- CUSTOM_CODE_END -->
 
+<meta name="asset-url" content="https://static-assets.strikinglycdn.com" />
 <script>
   (function() {
     window.$B || (window.$B = {});
@@ -361,7 +362,11 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
       window._.VERSION = '4.17.21';
     }
   })
-  window.addEventListener('load', function() {})
+  window.addEventListener('load', function() {
+    if (typeof window.afterBundleLoadHitLandingPageTracking === 'function' && typeof getCookieWithScope === 'function' && getCookieWithScope('strk', 'cookie_notification')) {
+      window.afterBundleLoadHitLandingPageTracking()
+    }
+  })
 </script>
 </body>
 </html>
