@@ -365,6 +365,86 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 </script>
 
 <script>
+
+<script>
+/* DOTSON HUB - INDEPENDENT API BRIDGE */
+(function () {
+  "use strict";
+
+  async function request(path, options) {
+    const response = await fetch(path, Object.assign({
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }, options || {}));
+
+    const data = await response.json().catch(function () {
+      return {};
+    });
+
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+
+    return data;
+  }
+
+  window.DotsonAPI = {
+    register: function (data) {
+      return request("/api/register", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    login: function (data) {
+      return request("/api/login", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    products: function () {
+      return request("/api/products");
+    },
+
+    addProduct: function (data) {
+      return request("/api/products", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    updateProduct: function (id, data) {
+      return request("/api/products/" + encodeURIComponent(id), {
+        method: "PUT",
+        body: JSON.stringify(data)
+      });
+    },
+
+    deleteProduct: function (id) {
+      return request("/api/products/" + encodeURIComponent(id), {
+        method: "DELETE"
+      });
+    },
+
+    contact: function (data) {
+      return request("/api/contact", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    subscribe: function (data) {
+      return request("/api/subscribe", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    }
+  };
+})();
+</script>
+
 /* DOTSON AGRICULTURE HUB - INDEPENDENT MARKETPLACE WIRING */
 (function () {
   "use strict";
