@@ -416,6 +416,111 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
     return "";
   }
 
+  function renderIndependentProducts(products) {
+    if (!Array.isArray(products) || !products.length) return;
+
+    const candidates = Array.from(document.querySelectorAll(
+      '[id*="store" i], [class*="store" i], [data-section-id*="store" i]'
+    ));
+
+    let target = candidates.find(function (el) {
+      return el.querySelector(".s-repeatable-item, .s-grid, .s-feature-list");
+    });
+
+    if (!target) {
+      console.warn("Dotson Store container not found.");
+      return;
+    }
+
+    let container = target.querySelector("[data-dotson-independent-store]");
+
+    if (!container) {
+      container = document.createElement("div");
+      container.setAttribute("data-dotson-independent-store", "1");
+      container.style.cssText =
+        "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));" +
+        "gap:20px;margin:25px 0;";
+      target.appendChild(container);
+    }
+
+    container.innerHTML = products.map(function (p) {
+      const image = p.image || "/assets/images/image-019.jpg";
+
+      return (
+        '<article style="background:#fff;border:1px solid #ddd;border-radius:8px;' +
+        'overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">' +
+
+        '<img src="' + escapeHtml(image) + '" alt="' +
+        escapeHtml(p.name || "Agricultural product") + '"' +
+        ' style="width:100%;height:190px;object-fit:cover;display:block;"' +
+        ' onerror="this.src=\\'/assets/images/image-019.jpg\\'">' +
+
+        '<div style="padding:16px;">' +
+
+        '<h3 style="margin:0 0 8px;color:#0a3d2e;">' +
+        escapeHtml(p.name || "") +
+        '</h3>' +
+
+        '<div style="font-weight:bold;margin-bottom:8px;">KSh ' +
+        Number(p.price || 0).toLocaleString() +
+        '</div>' +
+
+        '<p style="margin:0 0 12px;line-height:1.5;">' +
+        escapeHtml(p.description || "") +
+        '</p>' +
+
+        '<small style="display:block;margin-bottom:12px;">' +
+        escapeHtml(p.category || "Agricultural Products") +
+        '</small>' +
+
+        '<button type="button" data-dotson-contact="' +
+        escapeHtml(p.id || "") +
+        '" style="width:100%;padding:11px;background:#0a3d2e;' +
+        'color:#fff;border:0;border-radius:6px;cursor:pointer;">' +
+        'Contact Seller' +
+        '</button>' +
+
+        '</div></article>'
+      );
+    }).join("");
+
+    container.querySelectorAll("[data-dotson-contact]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const product = products.find(function (p) {
+          return p.id === button.getAttribute("data-dotson-contact");
+        });
+
+        if (!product) return;
+
+        const name = prompt("Your name:");
+        if (!name) return;
+
+        const email = prompt("Your email:");
+        if (!email) return;
+
+        const message = prompt(
+          "Message to " + (product.sellerName || "the seller") + ":"
+        );
+
+        if (!message) return;
+
+        try {
+          await window.DotsonAPI.contact({
+            name: name,
+            email: email,
+            message: message,
+            sellerId: product.sellerId || "",
+            productId: product.id || ""
+          });
+
+          notify("Message sent to the seller.");
+        } catch (error) {
+          notify(error.message || "Message could not be sent.");
+        }
+      });
+    });
+  }
+
   async function loadProducts() {
     try {
       const result = await window.DotsonAPI.products();
@@ -425,15 +530,12 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 
       window.DOTSON_PRODUCTS = products;
 
-      /*
-       * Keep the original Strikingly-rendered product cards intact.
-       * Independent products are exposed globally so the existing
-       * marketplace UI can consume them without changing its design.
-       */
       document.documentElement.setAttribute(
         "data-dotson-products-loaded",
         String(products.length)
       );
+
+      renderIndependentProducts(products);
 
       console.log("Dotson independent products loaded:", products.length);
     } catch (error) {
