@@ -365,8 +365,6 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 </script>
 
 <script>
-
-<script>
 /* DOTSON HUB - INDEPENDENT API BRIDGE */
 (function () {
   "use strict";
@@ -445,11 +443,20 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 })();
 </script>
 
+<script>
 /* DOTSON AGRICULTURE HUB - INDEPENDENT MARKETPLACE WIRING */
 (function () {
   "use strict";
 
   const storageKey = "dotson_session";
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   function session() {
     try {
