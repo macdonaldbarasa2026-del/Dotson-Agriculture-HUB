@@ -594,6 +594,226 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 })();
 </script>
 
+
+<script>
+/* DOTSON HUB - INDEPENDENT SELLER PORTAL */
+(function () {
+  "use strict";
+
+  function api(path, options) {
+    return fetch(path, Object.assign({
+      headers: {"Content-Type":"application/json"}
+    }, options || {})).then(async function (r) {
+      const data = await r.json().catch(function(){return {};});
+      if (!r.ok) throw new Error(data.error || "Request failed");
+      return data;
+    });
+  }
+
+  function user() {
+    try { return JSON.parse(localStorage.getItem("dotson_session") || "null"); }
+    catch (_) { return null; }
+  }
+
+  function notice(text) {
+    alert(text);
+  }
+
+  function openPortal() {
+    let box = document.getElementById("dotson-seller-portal");
+
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "dotson-seller-portal";
+      box.style.cssText =
+        "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2147483646;" +
+        "display:flex;align-items:center;justify-content:center;padding:18px;" +
+        "font-family:Arial,sans-serif;";
+
+      box.innerHTML =
+        '<div style="background:#fff;width:min(560px,100%);max-height:90vh;overflow:auto;border-radius:12px;padding:24px;box-sizing:border-box;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">' +
+        '<h2 style="margin:0;color:#0a3d2e;">Seller Portal</h2>' +
+        '<button id="dotson-close" style="border:0;background:none;font-size:25px;cursor:pointer;">&times;</button>' +
+        '</div>' +
+        '<div id="dotson-portal-content"></div>' +
+        '</div>';
+
+      document.body.appendChild(box);
+      document.getElementById("dotson-close").onclick = function(){ box.remove(); };
+    }
+
+    renderPortal();
+  }
+
+  function renderPortal() {
+    const root = document.getElementById("dotson-portal-content");
+    if (!root) return;
+
+    const current = user();
+
+    if (!current) {
+      root.innerHTML =
+        '<div style="display:grid;gap:12px;">' +
+        '<input id="dp-name" placeholder="Full name" style="padding:12px;">' +
+        '<input id="dp-email" type="email" placeholder="Email" style="padding:12px;">' +
+        '<input id="dp-phone" placeholder="Phone" style="padding:12px;">' +
+        '<input id="dp-password" type="password" placeholder="Password" style="padding:12px;">' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button id="dp-register" style="flex:1;padding:12px;background:#0a3d2e;color:#fff;border:0;border-radius:6px;">Register</button>' +
+        '<button id="dp-login" style="flex:1;padding:12px;background:#fff;color:#0a3d2e;border:1px solid #0a3d2e;border-radius:6px;">Login</button>' +
+        '</div>' +
+        '</div>';
+
+      document.getElementById("dp-register").onclick = async function(){
+        try {
+          const r = await api("/api/register", {
+            method:"POST",
+            body:JSON.stringify({
+              name:document.getElementById("dp-name").value.trim(),
+              email:document.getElementById("dp-email").value.trim(),
+              phone:document.getElementById("dp-phone").value.trim(),
+              password:document.getElementById("dp-password").value
+            })
+          });
+          if (r.user) localStorage.setItem("dotson_session", JSON.stringify(r.user));
+          notice("Seller account created.");
+          renderPortal();
+        } catch(e) { notice(e.message); }
+      };
+
+      document.getElementById("dp-login").onclick = async function(){
+        try {
+          const r = await api("/api/login", {
+            method:"POST",
+            body:JSON.stringify({
+              email:document.getElementById("dp-email").value.trim(),
+              password:document.getElementById("dp-password").value
+            })
+          });
+          if (r.user) localStorage.setItem("dotson_session", JSON.stringify(r.user));
+          notice("Login successful.");
+          renderPortal();
+        } catch(e) { notice(e.message); }
+      };
+      return;
+    }
+
+    root.innerHTML =
+      '<p style="margin-top:0;">Logged in as <strong>'+escapeHtml(current.name)+'</strong></p>' +
+      '<div style="display:grid;gap:10px;">' +
+      '<input id="dp-product-name" placeholder="Product name" style="padding:12px;">' +
+      '<textarea id="dp-product-description" placeholder="Product description" style="padding:12px;min-height:90px;"></textarea>' +
+      '<input id="dp-product-category" placeholder="Category" style="padding:12px;">' +
+      '<input id="dp-product-price" type="number" placeholder="Price (KSh)" style="padding:12px;">' +
+      '<input id="dp-product-image" placeholder="Image path or URL" style="padding:12px;">' +
+      '<button id="dp-add" style="padding:12px;background:#0a3d2e;color:#fff;border:0;border-radius:6px;">Add Product</button>' +
+      '<button id="dp-logout" style="padding:10px;background:#fff;color:#0a3d2e;border:1px solid #0a3d2e;border-radius:6px;">Logout</button>' +
+      '</div>' +
+      '<hr style="margin:20px 0;">' +
+      '<h3 style="color:#0a3d2e;">Your Products</h3>' +
+      '<div id="dp-products">Loading...</div>';
+
+    document.getElementById("dp-logout").onclick = function(){
+      localStorage.removeItem("dotson_session");
+      renderPortal();
+    };
+
+    document.getElementById("dp-add").onclick = async function(){
+      try {
+        await api("/api/products", {
+          method:"POST",
+          body:JSON.stringify({
+            sellerId:current.id,
+            name:document.getElementById("dp-product-name").value.trim(),
+            description:document.getElementById("dp-product-description").value.trim(),
+            category:document.getElementById("dp-product-category").value.trim(),
+            price:Number(document.getElementById("dp-product-price").value),
+            image:document.getElementById("dp-product-image").value.trim()
+          })
+        });
+        notice("Product added.");
+        renderPortal();
+      } catch(e) { notice(e.message); }
+    };
+
+    loadSellerProducts(current.id);
+  }
+
+  async function loadSellerProducts(sellerId) {
+    const target = document.getElementById("dp-products");
+    if (!target) return;
+
+    try {
+      const r = await api("/api/products");
+      const products = Array.isArray(r) ? r : (r.products || []);
+      const mine = products.filter(function(p){ return p.sellerId === sellerId; });
+
+      if (!mine.length) {
+        target.textContent = "No products yet.";
+        return;
+      }
+
+      target.innerHTML = mine.map(function(p){
+        return '<div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:10px;">' +
+          '<strong>'+escapeHtml(p.name)+'</strong><br>' +
+          '<span>KSh '+Number(p.price).toLocaleString()+'</span><br>' +
+          '<small>'+escapeHtml(p.description || '')+'</small><br>' +
+          '<button data-delete-product="'+escapeHtml(p.id)+'" style="margin-top:8px;padding:7px;">Delete</button>' +
+          '</div>';
+      }).join("");
+
+      target.querySelectorAll("[data-delete-product]").forEach(function(btn){
+        btn.onclick = async function(){
+          if (!confirm("Delete this product?")) return;
+          try {
+            await api("/api/products/"+encodeURIComponent(btn.dataset.deleteProduct), {
+              method:"DELETE"
+            });
+            loadSellerProducts(sellerId);
+          } catch(e) { notice(e.message); }
+        };
+      });
+    } catch(e) {
+      target.textContent = e.message;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function wireSellerButtons() {
+    document.querySelectorAll("a,button").forEach(function(el){
+      const text = (el.textContent || "").trim().toLowerCase();
+
+      if (text === "join us" || text === "seller" || text === "seller portal") {
+        if (el.dataset.dotsonSellerWired === "1") return;
+        el.dataset.dotsonSellerWired = "1";
+
+        el.addEventListener("click", function(e){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          openPortal();
+        }, true);
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    wireSellerButtons();
+
+    new MutationObserver(function(){
+      wireSellerButtons();
+    }).observe(document.body,{childList:true,subtree:true});
+  });
+})();
+</script>
+
 </body>
 
 <script>
