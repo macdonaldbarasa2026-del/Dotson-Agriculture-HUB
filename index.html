@@ -504,43 +504,60 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
   }
 
   function renderIndependentProducts(products) {
-    if (!Array.isArray(products) || !products.length) return;
-
-    const candidates = Array.from(document.querySelectorAll(
-      '[id*="store" i], [class*="store" i], [data-section-id*="store" i]'
-    ));
-
-    let target = candidates.find(function (el) {
-      return el.querySelector(".s-repeatable-item, .s-grid, .s-feature-list");
-    });
-
-    if (!target) {
-      console.warn("Dotson Store container not found.");
+    if (!Array.isArray(products) || !products.length) {
+      console.log("Dotson marketplace: no independent products yet.");
       return;
     }
 
-    let container = target.querySelector("[data-dotson-independent-store]");
+    let container = document.querySelector("[data-dotson-independent-store]");
 
     if (!container) {
       container = document.createElement("div");
       container.setAttribute("data-dotson-independent-store", "1");
+
       container.style.cssText =
-        "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));" +
-        "gap:20px;margin:25px 0;";
+        "display:grid;" +
+        "grid-template-columns:repeat(auto-fit,minmax(220px,1fr));" +
+        "gap:20px;" +
+        "width:100%;" +
+        "box-sizing:border-box;" +
+        "margin:20px 0;";
+
+      /*
+       * Prefer the existing Store section.
+       * If its exact Strikingly selector changes, use the first
+       * content section as a safe fallback instead of failing.
+       */
+      const store =
+        document.querySelector("#store") ||
+        document.querySelector('[id*="store" i]') ||
+        document.querySelector('[class*="store" i]') ||
+        document.querySelector('[data-section-id*="store" i]');
+
+      const target =
+        store ||
+        document.querySelector(".s-section") ||
+        document.querySelector("main") ||
+        document.body;
+
       target.appendChild(container);
     }
 
     container.innerHTML = products.map(function (p) {
-      const image = p.image || "/assets/images/image-019.jpg";
+      const image =
+        typeof p.image === "string" && p.image.trim()
+          ? p.image.trim()
+          : "/assets/images/image-019.jpg";
 
       return (
-        '<article style="background:#fff;border:1px solid #ddd;border-radius:8px;' +
-        'overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">' +
+        '<article class="dotson-independent-product" ' +
+        'style="background:#fff;border:1px solid #ddd;border-radius:8px;' +
+        'overflow:hidden;box-sizing:border-box;">' +
 
-        '<img src="' + escapeHtml(image) + '" alt="' +
-        escapeHtml(p.name || "Agricultural product") + '"' +
+        '<img src="' + escapeHtml(image) + '"' +
+        ' alt="' + escapeHtml(p.name || "Agricultural product") + '"' +
         ' style="width:100%;height:190px;object-fit:cover;display:block;"' +
-        ' onerror="this.src=\\'/assets/images/image-019.jpg\\'">' +
+        ' onerror="this.onerror=null;this.src=\\'/assets/images/image-019.jpg\\';">' +
 
         '<div style="padding:16px;">' +
 
@@ -552,7 +569,7 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
         Number(p.price || 0).toLocaleString() +
         '</div>' +
 
-        '<p style="margin:0 0 12px;line-height:1.5;">' +
+        '<p style="margin:0 0 10px;line-height:1.5;">' +
         escapeHtml(p.description || "") +
         '</p>' +
 
@@ -588,7 +605,6 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
         const message = prompt(
           "Message to " + (product.sellerName || "the seller") + ":"
         );
-
         if (!message) return;
 
         try {
@@ -606,6 +622,11 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
         }
       });
     });
+
+    console.log(
+      "Dotson independent marketplace rendered:",
+      products.length
+    );
   }
 
   async function loadProducts() {
