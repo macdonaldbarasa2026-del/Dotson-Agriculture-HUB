@@ -595,6 +595,224 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
 </script>
 
 </body>
+
+<script>
+window.DOTSON_BRAND_ASSETS = {
+  logo: "/assets/images/image-015.png",
+  images: Array.from({length: 40}, (_, i) => {
+    const n = String(i + 1).padStart(3, "0");
+    const ext = [3, 15, 40].includes(i + 1) ? "png" : "jpg";
+    return `/assets/images/image-${n}.${ext}`;
+  })
+};
+</script>
+
+
+
+
+<script>
+/* DOTSON HUB - INDEPENDENT UI CONTROL */
+(function () {
+  "use strict";
+
+  function getSession() {
+    try {
+      return JSON.parse(localStorage.getItem("dotson_session") || "null");
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSession(user) {
+    localStorage.setItem("dotson_session", JSON.stringify(user));
+  }
+
+  function message(text) {
+    let box = document.getElementById("dotson-independent-message");
+
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "dotson-independent-message";
+      box.style.cssText =
+        "position:fixed;top:18px;right:18px;z-index:2147483647;" +
+        "max-width:320px;padding:14px 18px;border-radius:8px;" +
+        "background:#0a3d2e;color:white;font:14px Arial,sans-serif;" +
+        "box-shadow:0 5px 20px rgba(0,0,0,.25)";
+      document.body.appendChild(box);
+    }
+
+    box.textContent = text;
+
+    clearTimeout(window.__dotsonMessageTimer);
+    window.__dotsonMessageTimer = setTimeout(function () {
+      box.remove();
+    }, 3500);
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, Object.assign({
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }, options || {}));
+
+    const data = await response.json().catch(function () {
+      return {};
+    });
+
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+
+    return data;
+  }
+
+  window.DotsonIndependent = {
+    register: async function (data) {
+      const result = await api("/api/register", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+
+      if (result.user) saveSession(result.user);
+
+      return result;
+    },
+
+    login: async function (data) {
+      const result = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+
+      if (result.user) saveSession(result.user);
+
+      return result;
+    },
+
+    products: function () {
+      return api("/api/products");
+    },
+
+    addProduct: async function (data) {
+      const user = getSession();
+
+      if (!user || !user.id) {
+        throw new Error("Please log in as a seller first.");
+      }
+
+      return api("/api/products", {
+        method: "POST",
+        body: JSON.stringify(Object.assign({}, data, {
+          sellerId: user.id
+        }))
+      });
+    },
+
+    updateProduct: function (id, data) {
+      return api("/api/products/" + encodeURIComponent(id), {
+        method: "PUT",
+        body: JSON.stringify(data)
+      });
+    },
+
+    deleteProduct: function (id) {
+      return api("/api/products/" + encodeURIComponent(id), {
+        method: "DELETE"
+      });
+    },
+
+    contact: function (data) {
+      return api("/api/contact", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    subscribe: function (data) {
+      return api("/api/subscribe", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+
+    currentUser: getSession,
+
+    logout: function () {
+      localStorage.removeItem("dotson_session");
+      message("Logged out successfully.");
+    }
+  };
+
+  async function loadIndependentProducts() {
+    try {
+      const result = await window.DotsonIndependent.products();
+      window.DOTSON_INDEPENDENT_PRODUCTS =
+        Array.isArray(result) ? result : (result.products || []);
+
+      document.documentElement.setAttribute(
+        "data-dotson-independent-products",
+        String(window.DOTSON_INDEPENDENT_PRODUCTS.length)
+      );
+
+      console.log(
+        "Dotson independent marketplace products:",
+        window.DOTSON_INDEPENDENT_PRODUCTS.length
+      );
+    } catch (error) {
+      console.warn("Dotson product API:", error.message);
+    }
+  }
+
+  function wireSubscribe() {
+    document.querySelectorAll(".s-signup-form").forEach(function (form) {
+      if (form.dataset.dotsonSubscribe === "1") return;
+
+      const button = form.querySelector(".s-email-form-button");
+      const email = form.querySelector('input[aria-label="Email"]');
+      const name = form.querySelector('input[aria-label="Name"]');
+
+      if (!button || !email) return;
+
+      form.dataset.dotsonSubscribe = "1";
+
+      button.classList.remove("disabled");
+
+      button.addEventListener("click", async function (event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        try {
+          await window.DotsonIndependent.subscribe({
+            name: name ? name.value.trim() : "",
+            email: email.value.trim()
+          });
+
+          message("Subscription successful.");
+          email.value = "";
+          if (name) name.value = "";
+        } catch (error) {
+          message(error.message);
+        }
+      }, true);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    loadIndependentProducts();
+    wireSubscribe();
+
+    new MutationObserver(function () {
+      wireSubscribe();
+    }).observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    window.dispatchEvent(new CustomEvent("dotson-independent-ready"));
+  });
+})();
+</script>
 </html>
 <script>
 window.DOTSON_BRAND_ASSETS = {
@@ -607,93 +825,7 @@ window.DOTSON_BRAND_ASSETS = {
 };
 </script>
 
-<script>
-(function () {
-  const API_BASE =
-    window.DOTSON_API_BASE ||
-    (window.location.protocol === "file:" ? "http://localhost:10000" : "");
 
-  async function dotsonAPI(path, options = {}) {
-    const response = await fetch(API_BASE + path, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-      },
-      ...options
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(data.error || "Request failed");
-    }
-
-    return data;
-  }
-
-  window.DotsonAPI = {
-    health: () => dotsonAPI("/api/health"),
-
-    products: () =>
-      dotsonAPI("/api/products"),
-
-    register: data =>
-      dotsonAPI("/api/register", {
-        method: "POST",
-        body: JSON.stringify(data)
-      }),
-
-    login: data =>
-      dotsonAPI("/api/login", {
-        method: "POST",
-        body: JSON.stringify(data)
-      }),
-
-    addProduct: data =>
-      dotsonAPI("/api/products", {
-        method: "POST",
-        body: JSON.stringify(data)
-      }),
-
-    updateProduct: (id, data) =>
-      dotsonAPI("/api/products/" + encodeURIComponent(id), {
-        method: "PUT",
-        body: JSON.stringify(data)
-      }),
-
-    deleteProduct: id =>
-      dotsonAPI("/api/products/" + encodeURIComponent(id), {
-        method: "DELETE"
-      }),
-
-    contact: data =>
-      dotsonAPI("/api/contact", {
-        method: "POST",
-        body: JSON.stringify(data)
-      }),
-
-    subscribe: data =>
-      dotsonAPI("/api/subscribe", {
-        method: "POST",
-        body: JSON.stringify(data)
-      })
-  };
-
-  window.addEventListener("DOMContentLoaded", function () {
-    DotsonAPI.health()
-      .then(function () {
-        document.documentElement.setAttribute(
-          "data-dotson-backend",
-          "connected"
-        );
-        console.log("Dotson independent backend connected");
-      })
-      .catch(function (error) {
-        console.warn("Dotson backend unavailable:", error.message);
-      });
-  });
-})();
-</script>
 
 
 <script>
