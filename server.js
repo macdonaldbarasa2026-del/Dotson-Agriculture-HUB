@@ -12,12 +12,7 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function loadDB() {
   if (!fs.existsSync(DATA_FILE)) {
-    const db = {
-      users: [],
-      products: [],
-      messages: [],
-      subscribers: []
-    };
+    const db = { users: [], products: [], messages: [], subscribers: [] };
     fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
     return db;
   }
@@ -25,12 +20,7 @@ function loadDB() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   } catch {
-    return {
-      users: [],
-      products: [],
-      messages: [],
-      subscribers: []
-    };
+    return { users: [], products: [], messages: [], subscribers: [] };
   }
 }
 
@@ -48,6 +38,23 @@ function clean(value) {
   return String(value || "").trim();
 }
 
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored || !stored.includes(":")) return false;
+
+  const [salt, originalHash] = stored.split(":");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+
+  return crypto.timingSafeEqual(
+    Buffer.from(hash, "hex"),
+    Buffer.from(originalHash, "hex")
+  );
+}
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -55,7 +62,9 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+
   if (req.method === "OPTIONS") return res.sendStatus(204);
+
   next();
 });
 
@@ -84,6 +93,13 @@ app.post("/api/register", (req, res) => {
     });
   }
 
+  if (password.length < 6) {
+    return res.status(400).json({
+      ok: false,
+      error: "Password must be at least 6 characters."
+    });
+  }
+
   if (db.users.some(u => u.email === email)) {
     return res.status(409).json({
       ok: false,
@@ -96,7 +112,7 @@ app.post("/api/register", (req, res) => {
     name,
     email,
     phone,
-    password,
+    passwordHash: hashPassword(password),
     role: "seller",
     createdAt: new Date().toISOString()
   };
@@ -120,11 +136,30 @@ app.post("/api/login", (req, res) => {
   const email = clean(req.body.email).toLowerCase();
   const password = clean(req.body.password);
 
-  const user = db.users.find(
-    u => u.email === email && u.password === password
-  );
+  const user = db.users.find(u => u.email === email);
 
   if (!user) {
+    return res.status(401).json({
+      ok: false,
+      error: "Invalid email or password."
+    });
+  }
+
+  let valid = false;
+
+  if (user.passwordHash) {
+    valid = verifyPassword(password, user.passwordHash);
+  } else if (user.password) {
+    valid = user.password === password;
+
+    if (valid) {
+      user.passwordHash = hashPassword(password);
+      delete user.password;
+      saveDB();
+    }
+  }
+
+  if (!valid) {
     return res.status(401).json({
       ok: false,
       error: "Invalid email or password."
@@ -200,18 +235,23 @@ app.put("/api/products/:id", (req, res) => {
   }
 
   if (req.body.name !== undefined) product.name = clean(req.body.name);
-  if (req.body.description !== undefined) {
-    product.description = clean(req.body.description);
-  }
-  if (req.body.category !== undefined) {
-    product.category = clean(req.body.category);
-  }
+  if (req.body.description !== undefined) product.description = clean(req.body.description);
+  if (req.body.category !== undefined) product.category = clean(req.body.category);
+
   if (req.body.price !== undefined) {
-    product.price = Number(req.body.price);
+    const price = Number(req.body.price);
+
+    if (!Number.isFinite(price)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid product price."
+      });
+    }
+
+    product.price = price;
   }
-  if (req.body.image !== undefined) {
-    product.image = clean(req.body.image);
-  }
+
+  if (req.body.image !== undefined) product.image = clean(req.body.image);
 
   saveDB();
 
@@ -235,9 +275,7 @@ app.delete("/api/products/:id", (req, res) => {
 
   saveDB();
 
-  res.json({
-    ok: true
-  });
+  res.json({ ok: true });
 });
 
 app.post("/api/contact", (req, res) => {
@@ -254,7 +292,7 @@ app.post("/api/contact", (req, res) => {
     });
   }
 
-  const record = {
+  db.messages.push({
     id: id(),
     name,
     email,
@@ -262,9 +300,8 @@ app.post("/api/contact", (req, res) => {
     sellerId,
     productId,
     createdAt: new Date().toISOString()
-  };
+  });
 
-  db.messages.push(record);
   saveDB();
 
   res.status(201).json({
