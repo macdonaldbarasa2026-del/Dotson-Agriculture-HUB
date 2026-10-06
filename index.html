@@ -363,6 +363,237 @@ document.addEventListener('lazybeforeunveil', function(e){var bg = e.target.getA
   })
   window.addEventListener('load', function() {})
 </script>
+
+<script>
+/* DOTSON AGRICULTURE HUB - INDEPENDENT MARKETPLACE WIRING */
+(function () {
+  "use strict";
+
+  const storageKey = "dotson_session";
+
+  function session() {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || "null");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function saveSession(user) {
+    localStorage.setItem(storageKey, JSON.stringify(user));
+  }
+
+  function clearSession() {
+    localStorage.removeItem(storageKey);
+  }
+
+  function notify(message) {
+    console.log("[Dotson HUB]", message);
+    const existing = document.querySelector("[data-dotson-notice]");
+    if (existing) existing.remove();
+
+    const box = document.createElement("div");
+    box.setAttribute("data-dotson-notice", "1");
+    box.textContent = message;
+    box.style.cssText =
+      "position:fixed;top:20px;right:20px;z-index:999999;" +
+      "background:#0a3d2e;color:#fff;padding:14px 18px;" +
+      "border-radius:8px;font:14px Arial,sans-serif;" +
+      "box-shadow:0 4px 20px rgba(0,0,0,.2)";
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 3500);
+  }
+
+  function field(form, names) {
+    for (const name of names) {
+      const el =
+        form.querySelector('[name="' + name + '"]') ||
+        form.querySelector('[aria-label="' + name + '"]') ||
+        form.querySelector('input[placeholder*="' + name + '" i]');
+
+      if (el) return el.value.trim();
+    }
+    return "";
+  }
+
+  async function loadProducts() {
+    try {
+      const result = await window.DotsonAPI.products();
+      const products = Array.isArray(result)
+        ? result
+        : (result.products || []);
+
+      window.DOTSON_PRODUCTS = products;
+
+      /*
+       * Keep the original Strikingly-rendered product cards intact.
+       * Independent products are exposed globally so the existing
+       * marketplace UI can consume them without changing its design.
+       */
+      document.documentElement.setAttribute(
+        "data-dotson-products-loaded",
+        String(products.length)
+      );
+
+      console.log("Dotson independent products loaded:", products.length);
+    } catch (error) {
+      console.warn("Dotson products unavailable:", error.message);
+    }
+  }
+
+  async function submitNewsletter(form) {
+    const inputs = form.querySelectorAll("input");
+    let name = "";
+    let email = "";
+
+    inputs.forEach(function (input) {
+      const label = (
+        input.getAttribute("aria-label") ||
+        input.getAttribute("placeholder") ||
+        ""
+      ).toLowerCase();
+
+      if (label.includes("name")) name = input.value.trim();
+      if (label.includes("email")) email = input.value.trim();
+    });
+
+    if (!email) {
+      const emailInput =
+        form.querySelector('input[type="email"]') ||
+        form.querySelector('input[aria-label*="Email" i]');
+      if (emailInput) email = emailInput.value.trim();
+    }
+
+    if (!email) {
+      notify("Please enter your email address.");
+      return;
+    }
+
+    try {
+      await window.DotsonAPI.subscribe({ name, email });
+      notify("Subscription successful.");
+      form.querySelectorAll("input").forEach(function (input) {
+        input.value = "";
+      });
+    } catch (error) {
+      notify(error.message || "Subscription failed.");
+    }
+  }
+
+  function wireNewsletter() {
+    document
+      .querySelectorAll(".s-signup-form, .s-email-form-container")
+      .forEach(function (form) {
+        if (form.dataset.dotsonWired === "1") return;
+
+        const button = form.querySelector(
+          ".s-email-form-button, button[type='submit'], button"
+        );
+
+        if (!button) return;
+
+        form.dataset.dotsonWired = "1";
+
+        button.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          submitNewsletter(form);
+        }, true);
+      });
+  }
+
+  function wireContactLinks() {
+    document.querySelectorAll('a[href^="mailto:"]').forEach(function (link) {
+      if (link.dataset.dotsonWired === "1") return;
+
+      link.dataset.dotsonWired = "1";
+
+      link.addEventListener("click", function () {
+        /*
+         * Keep the existing mail contact behaviour.
+         * The independent /api/contact endpoint is available for
+         * actual contact forms and seller messages.
+         */
+        console.log("Dotson contact:", link.href);
+      });
+    });
+  }
+
+  function exposeSellerActions() {
+    window.DotsonSeller = {
+      register: async function (data) {
+        const result = await window.DotsonAPI.register(data);
+        if (result.user) saveSession(result.user);
+        return result;
+      },
+
+      login: async function (data) {
+        const result = await window.DotsonAPI.login(data);
+        if (result.user) saveSession(result.user);
+        return result;
+      },
+
+      logout: function () {
+        clearSession();
+        notify("You have been logged out.");
+      },
+
+      currentUser: function () {
+        return session();
+      },
+
+      addProduct: async function (data) {
+        const user = session();
+
+        if (!user || !user.id) {
+          throw new Error("Please log in as a seller first.");
+        }
+
+        return window.DotsonAPI.addProduct({
+          sellerId: user.id,
+          ...data
+        });
+      },
+
+      updateProduct: function (id, data) {
+        return window.DotsonAPI.updateProduct(id, data);
+      },
+
+      deleteProduct: function (id) {
+        return window.DotsonAPI.deleteProduct(id);
+      },
+
+      contactSeller: function (data) {
+        return window.DotsonAPI.contact(data);
+      }
+    };
+
+    window.dispatchEvent(new CustomEvent("dotson:ready", {
+      detail: {
+        user: session()
+      }
+    }));
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    exposeSellerActions();
+    wireNewsletter();
+    wireContactLinks();
+    loadProducts();
+
+    const observer = new MutationObserver(function () {
+      wireNewsletter();
+      wireContactLinks();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  });
+})();
+</script>
+
 </body>
 </html>
 <script>
